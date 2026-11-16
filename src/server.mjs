@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import zlib from 'node:zlib';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import QRCode from 'qrcode';
 import { loadQuestions } from './sheets.mjs';
@@ -31,6 +32,7 @@ loadEnv();
 
 const PORT = Number.parseInt(process.env.PORT || '3000', 10);
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '2026';
+const REMOTE_TOKEN = process.env.REMOTE_TOKEN || crypto.createHash('sha256').update(`remote:${ADMIN_PASSWORD}`).digest('hex').slice(0, 12);
 const EVENT_TITLE = process.env.EVENT_TITLE || '2026 招生說明會 × 親師即時互動';
 const INITIAL_SHEET_URL = process.env.GOOGLE_SHEET_CSV_URL || '';
 
@@ -39,7 +41,7 @@ const store = new RoomStore({ eventTitle: EVENT_TITLE });
 // Cache HTML assets in memory for maximum concurrency
 const htmlCache = {};
 function loadHtmlAssets() {
-  for (const name of ['mobile', 'stage', 'admin']) {
+  for (const name of ['mobile', 'stage', 'admin', 'remote']) {
     const filePath = path.join(ROOT_DIR, 'public', `${name}.html`);
     const raw = fs.readFileSync(filePath);
     htmlCache[name] = {
@@ -149,7 +151,7 @@ function readJsonBody(req, maxBytes = 32768) {
 function isAdminAuthorized(req, body) {
   const headerPass = req.headers['x-admin-password'];
   const pass = headerPass || body?.password || '';
-  return pass === ADMIN_PASSWORD;
+  return pass === ADMIN_PASSWORD || pass === REMOTE_TOKEN;
 }
 
 function getLanUrls() {
@@ -176,6 +178,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && pathname === '/') return sendHtml(req, res, 'mobile');
     if (req.method === 'GET' && pathname === '/stage') return sendHtml(req, res, 'stage');
     if (req.method === 'GET' && pathname === '/admin') return sendHtml(req, res, 'admin');
+    if (req.method === 'GET' && pathname === '/remote') return sendHtml(req, res, 'remote');
 
     // Sample CSV download
     if (req.method === 'GET' && pathname === '/api/sample.csv') {
@@ -270,7 +273,7 @@ const server = http.createServer(async (req, res) => {
       if (!isAdminAuthorized(req, body)) {
         return sendJson(res, 401, { ok: false, message: '控場密碼錯誤' });
       }
-      return sendJson(res, 200, { ok: true, state: store.getAdminState() });
+      return sendJson(res, 200, { ok: true, remoteToken: REMOTE_TOKEN, state: store.getAdminState() });
     }
 
     // Admin state
@@ -278,7 +281,7 @@ const server = http.createServer(async (req, res) => {
       if (!isAdminAuthorized(req, null)) {
         return sendJson(res, 401, { ok: false, message: '未授權' });
       }
-      return sendJson(res, 200, store.getAdminState());
+      return sendJson(res, 200, { ...store.getAdminState(), remoteToken: REMOTE_TOKEN });
     }
 
     // Admin control actions

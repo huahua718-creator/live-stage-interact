@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>講者手機遙控器</title>
+<style>
+:root{--bg:#060b18;--card:#111b2e;--border:#24344f;--text:#f8fafc;--muted:#94a3b8;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;min-height:100dvh;background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","Microsoft JhengHei",sans-serif;display:flex;flex-direction:column;padding:14px 14px 24px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
+.pill{padding:5px 11px;border-radius:999px;background:rgba(56,189,248,.16);color:var(--accent);font-size:13px;font-weight:700}
+.count{padding:5px 11px;border-radius:999px;background:rgba(34,197,94,.16);color:#86efac;font-size:13px;font-weight:700}
+.groups{display:flex;gap:8px;overflow-x:auto;padding-bottom:8px;margin-bottom:8px;scrollbar-width:none}
+.groups::-webkit-scrollbar{display:none}
+.g-btn{flex-shrink:0;padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--card);color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
+.g-btn.active{border-color:var(--accent);background:rgba(56,189,248,.2);color:var(--accent)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;margin-bottom:12px}
+.q-meta{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted);margin-bottom:6px}
+.q-title{font-size:19px;font-weight:800;line-height:1.4;margin:0}
+.nav-grid{display:grid;grid-template-columns:1fr 1.25fr;gap:12px;margin-bottom:12px}
+.big-btn{padding:22px 14px;border:0;border-radius:18px;font-size:19px;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;transition:transform .08s}
+.big-btn:active{transform:scale(.97)}
+.btn-prev{background:#1e293b;color:var(--text);border:1px solid var(--border)}
+.btn-next{background:linear-gradient(135deg,#38bdf8,#818cf8);color:#061224}
+.phase-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin-bottom:12px}
+.ph-btn{padding:14px 10px;border-radius:14px;border:1px solid var(--border);background:#0d1628;color:var(--text);font-size:14px;font-weight:700;cursor:pointer}
+.ph-btn:active{transform:scale(.98)}
+.ph-btn.ok{border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.16);color:#86efac}
+.ph-btn.warn{border-color:rgba(245,158,11,.5);background:rgba(245,158,11,.16);color:#fcd34d}
+.ph-btn.accent{border-color:rgba(56,189,248,.5);background:rgba(56,189,248,.16);color:#7dd3fc}
+.list-title{font-size:13px;color:var(--muted);margin:4px 0 8px;font-weight:700}
+.q-list{display:flex;flex-direction:column;gap:8px}
+.q-row{padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#0c1424;display:flex;justify-content:space-between;align-items:center;gap:10px;cursor:pointer;font-size:14px}
+.q-row.active{border-color:var(--accent);background:rgba(56,189,248,.16)}
+.tag{font-size:11px;padding:2px 7px;border-radius:6px;background:rgba(148,163,184,.18);color:#cbd5e1;font-weight:700;flex-shrink:0}
+.login-card{max-width:360px;margin:60px auto;width:100%}
+input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--border);background:#091020;color:var(--text);font-size:16px;margin-bottom:10px}
+</style>
+</head>
+<body>
+<div id="loginBox" class="card login-card" style="display:none">
+  <h2 style="margin:0 0 8px">📱 講者遙控器登入</h2>
+  <p style="color:var(--muted);font-size:13px;margin:0 0 14px">請掃描控場後台 QR Code 自動登入，或手動輸入控場密碼：</p>
+  <input id="pwdIn" type="password" placeholder="輸入控場密碼">
+  <button id="loginBtn" class="big-btn btn-next" style="width:100%;padding:14px">連線遙控器</button>
+  <p id="errMsg" style="color:#fca5a5;font-size:13px;margin:8px 0 0"></p>
+</div>
+
+<div id="mainBox" style="display:none">
+  <div class="top">
+    <span id="topBadge" class="pill">遙控已連線</span>
+    <span id="liveCount" class="count">已參與 0 人</span>
+  </div>
+
+  <div id="groupBar" class="groups"></div>
+
+  <div class="card">
+    <div class="q-meta">
+      <span id="qMeta">待機中</span>
+      <span id="qStatus">--</span>
+    </div>
+    <p id="qTitle" class="q-title">目前為待機 QR 畫面</p>
+  </div>
+
+  <div class="nav-grid">
+    <button id="prevBtn" class="big-btn btn-prev">⬅ 上一題</button>
+    <button id="nextBtn" class="big-btn btn-next">下一題 ➡</button>
+  </div>
+
+  <div class="phase-grid">
+    <button id="voteBtn" class="ph-btn ok">▶ 開放作答</button>
+    <button id="lockBtn" class="ph-btn warn">🔒 截止鎖定</button>
+    <button id="revealBtn" class="ph-btn accent">✨ 揭曉答案</button>
+    <button id="standbyBtn" class="ph-btn">⏸ 切換待機 QR</button>
+  </div>
+
+  <div id="danmakuCard" class="card" style="display:none">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span class="list-title" style="margin:0">💬 點擊提問推上大螢幕聚焦</span>
+      <button id="clearSpot" class="g-btn" style="padding:4px 10px;font-size:12px">取消聚焦</button>
+    </div>
+    <div id="dmList" class="q-list" style="max-height:220px;overflow-y:auto"></div>
+  </div>
+
+  <div class="list-title">📋 點擊快速跳題</div>
+  <div id="qList" class="q-list"></div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const urlParams = new URLSearchParams(location.search);
+let token = urlParams.get('token') || sessionStorage.getItem('lsi_remote_token') || '';
+if (urlParams.get('token')) {
+  sessionStorage.setItem('lsi_remote_token', token);
+  history.replaceState(null, '', '/remote');
+}
+
+let state = null;
+
+async function api(url, method = 'GET', body = null) {
+  const opts = { method, headers: { 'x-admin-password': token } };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(url, opts);
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401) {
+    sessionStorage.removeItem('lsi_remote_token');
+    $('loginBox').style.display = 'block';
+    $('mainBox').style.display = 'none';
+    throw new Error(d.message || '驗證失敗');
+  }
+  if (!r.ok) throw new Error(d.message || '操作失敗');
+  return d;
+}
+
+async function initAuth(t) {
+  token = t;
+  try {
+    const res = await api('/api/admin/login', 'POST', { password: token });
+    sessionStorage.setItem('lsi_remote_token', token);
+    $('loginBox').style.display = 'none';
+    $('mainBox').style.display = 'block';
+    state = res.state;
+    render();
+  } catch (e) {
+    $('loginBox').style.display = 'block';
+    $('mainBox').style.display = 'none';
+    $('errMsg').textContent = e.message;
+  }
+}
+
+$('loginBtn').onclick = () => initAuth($('pwdIn').value);
+if (token) initAuth(token);
+else $('loginBox').style.display = 'block';
+
+async function ctrl(action, extra = {}) {
+  try {
+    const res = await api('/api/admin/control', 'POST', { action, ...extra });
+    state = res.state;
+    render();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+$('prevBtn').onclick = () => ctrl('prev');
+$('nextBtn').onclick = () => ctrl('next');
+$('voteBtn').onclick = () => ctrl('status', { status: 'VOTING' });
+$('lockBtn').onclick = () => ctrl('status', { status: 'LOCKED' });
+$('revealBtn').onclick = () => ctrl('status', { status: 'REVEALED' });
+$('standbyBtn').onclick = () => ctrl('standby', { value: !state?.standby });
+$('clearSpot').onclick = () => ctrl('spotlight', { msgId: null });
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function render() {
+  if (!state) return;
+  $('liveCount').textContent = `已參與 ${state.stats?.totalVotes || 0} 人`;
+  $('topBadge').textContent = state.standby ? '待機中' : `第 ${state.qIdx + 1} / ${state.qTotal} 題`;
+  $('standbyBtn').textContent = state.standby ? '▶ 進入題目' : '⏸ 切回待機 QR';
+
+  if (state.standby) {
+    $('qMeta').textContent = '待機畫面';
+    $('qStatus').textContent = 'STANDBY';
+    $('qTitle').textContent = '大螢幕目前顯示歡迎 QR Code，點擊「下一題」或下方題目即可開始！';
+  } else {
+    $('qMeta').textContent = `${state.group || '預設題組'} · ${state.mode}`;
+    $('qStatus').textContent = state.status;
+    $('qTitle').textContent = state.title;
+  }
+
+  const activeG = state.activeGroup || '__ALL__';
+  $('groupBar').innerHTML = [
+    `<button class="g-btn ${activeG === '__ALL__' ? 'active' : ''}" onclick="ctrl('setGroup',{group:'__ALL__'})">全部 (${state.totalAllQuestions || 0})</button>`,
+    ...(state.groups || []).map(g => `<button class="g-btn ${activeG === g.name ? 'active' : ''}" onclick="ctrl('setGroup',{group:'${esc(g.name)}'})">${esc(g.name)} (${g.count})</button>`),
+  ].join('');
+
+  $('qList').innerHTML = (state.questions || []).map(q => `
+    <div class="q-row ${!state.standby && q.index === state.qIdx ? 'active' : ''}" onclick="ctrl('goto',{index:${q.index}})">
+      <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><span class="tag">${esc(q.mode)}</span> ${esc(q.title)}</div>
+      <span style="color:var(--muted);font-size:12px;flex-shrink:0">#${q.order}</span>
+    </div>
+  `).join('');
+
+  const dmCard = $('danmakuCard');
+  if (!state.standby && state.mode === 'DANMAKU') {
+    dmCard.style.display = 'block';
+    const msgs = (state.allMessages || []).filter(m => !m.hidden);
+    const spotId = state.stats?.spotlightId;
+    $('dmList').innerHTML = msgs.length === 0
+      ? '<div style="color:var(--muted);font-size:13px">尚無提問</div>'
+      : msgs.map(m => `
+        <div class="q-row ${spotId === m.id ? 'active' : ''}" onclick="ctrl('spotlight',{msgId:'${spotId === m.id ? '' : m.id}'})">
+          <span><span class="tag">${esc(m.tag)}</span> ${esc(m.text)}</span>
+          <span class="tag" style="color:${spotId === m.id ? '#fbbf24' : '#38bdf8'}">${spotId === m.id ? '聚光中' : '聚焦'}</span>
+        </div>
+      `).join('');
+  } else {
+    dmCard.style.display = 'none';
+  }
+}
+
+setInterval(async () => {
+  if (!token || $('mainBox').style.display === 'none') return;
+  try {
+    state = await api('/api/admin/state');
+    render();
+  } catch {}
+}, 1200);
+</script>
+</body>
+</html>

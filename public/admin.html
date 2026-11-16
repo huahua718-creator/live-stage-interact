@@ -55,7 +55,23 @@ a{color:var(--accent)}
       <div class="row">
         <a href="/stage" target="_blank"><button class="ghost">🖥 開啟大螢幕 (/stage)</button></a>
         <a href="/" target="_blank"><button class="ghost">📱 預覽手機端 (/)</button></a>
+        <button id="remoteQrBtn" class="primary">📱 講者手機遙控 QR</button>
         <button id="standbyBtn" class="warn">待機 QR 畫面</button>
+      </div>
+    </div>
+
+    <div id="remoteCard" class="card" style="display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;border-color:rgba(56,189,248,.45)">
+      <div style="flex:1;min-width:240px">
+        <h3 style="margin-bottom:6px">📱 講者手機遙控器（免輸入密碼・掃碼即控場）</h3>
+        <p class="muted" style="margin:0 0 10px">請講者用手機相機掃描右側 QR Code，即可直接用手機大按鈕切換題目、切換處室題組、揭曉答案或聚焦彈幕。</p>
+        <div class="row">
+          <a id="remoteLink" href="/remote" target="_blank"><button class="ghost">🔗 開啟遙控器頁面</button></a>
+          <button id="copyRemoteBtn" class="ghost">📋 複製遙控網址</button>
+          <span id="copyTip" class="muted"></span>
+        </div>
+      </div>
+      <div style="background:#fff;padding:8px;border-radius:12px;text-align:center">
+        <img id="remoteQrImg" alt="講者遙控器 QR Code" style="width:124px;height:124px;display:block">
       </div>
     </div>
 
@@ -150,10 +166,33 @@ async function tryLogin(inputPwd) {
     $('mainView').style.display = 'block';
     state = res.state;
     $('sheetInput').value = state.sheetUrl || '';
+    setupRemoteQr(res.remoteToken);
     render();
   } catch (e) {
     $('loginErr').textContent = e.message;
   }
+}
+
+async function setupRemoteQr(remoteToken) {
+  let baseUrl = location.origin;
+  if (location.hostname === 'localhost' || location.hostname === '127.0.0.1') {
+    try {
+      const info = await fetch('/api/network-info').then(r => r.json());
+      if (info.urls?.length) baseUrl = info.urls[0];
+    } catch {}
+  }
+  const remoteUrl = `${baseUrl}/remote?token=${encodeURIComponent(remoteToken || '')}`;
+  $('remoteQrImg').src = `/api/qr.svg?url=${encodeURIComponent(remoteUrl)}`;
+  $('remoteLink').href = remoteUrl;
+  $('copyRemoteBtn').onclick = () => {
+    navigator.clipboard?.writeText(remoteUrl);
+    $('copyTip').textContent = '✓ 已複製遙控網址';
+    setTimeout(() => { $('copyTip').textContent = ''; }, 2000);
+  };
+  $('remoteQrBtn').onclick = () => {
+    const c = $('remoteCard');
+    c.style.display = c.style.display === 'none' ? 'flex' : 'none';
+  };
 }
 
 $('loginBtn').onclick = () => tryLogin($('pwdInput').value);
