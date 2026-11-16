@@ -40,6 +40,9 @@ export class RoomStore {
     this.eventTitle = eventTitle;
     this.sheetUrl = '';
     this.sheetSource = '';
+    this.allQuestions = [];
+    this.groups = [];
+    this.activeGroup = '__ALL__';
     this.questions = [];
     this.dataByQId = new Map();
 
@@ -69,18 +72,50 @@ export class RoomStore {
   }
 
   setQuestions(questions, source = '', sheetUrl = '') {
-    this.questions = questions;
+    this.allQuestions = questions;
     this.sheetSource = source;
     if (sheetUrl !== undefined) this.sheetUrl = sheetUrl;
+
+    const groupCounts = new Map();
     for (const q of questions) {
       if (!this.dataByQId.has(q.id)) {
         this.dataByQId.set(q.id, createQuestionData(q));
       }
+      const g = q.group || '預設題組';
+      groupCounts.set(g, (groupCounts.get(g) || 0) + 1);
+    }
+    this.groups = Array.from(groupCounts.entries()).map(([name, count]) => ({ name, count }));
+
+    if (this.activeGroup !== '__ALL__' && !groupCounts.has(this.activeGroup)) {
+      this.activeGroup = '__ALL__';
+    }
+    this._applyActiveGroup();
+    this._notify('questions');
+  }
+
+  _applyActiveGroup() {
+    if (this.activeGroup === '__ALL__') {
+      this.questions = this.allQuestions;
+    } else {
+      this.questions = this.allQuestions.filter((q) => (q.group || '預設題組') === this.activeGroup);
     }
     if (this.currentQuestionIndex >= this.questions.length) {
       this.currentQuestionIndex = 0;
     }
-    this._notify('questions');
+  }
+
+  setGroup(groupName) {
+    const target = groupName || '__ALL__';
+    if (target !== '__ALL__' && !this.groups.some((g) => g.name === target)) {
+      return false;
+    }
+    this.activeGroup = target;
+    this._applyActiveGroup();
+    this.currentQuestionIndex = 0;
+    this.status = 'VOTING';
+    this._startTimerIfNeeded(this.getCurrentQuestion());
+    this._notify('state');
+    return true;
   }
 
   getCurrentQuestion() {
@@ -183,6 +218,7 @@ export class RoomStore {
       qIdx: this.currentQuestionIndex,
       qTotal: this.questions.length,
       qId: q.id,
+      group: q.group || '預設題組',
       mode: q.mode,
       title: q.title,
       subtitle: q.subtitle,
@@ -235,9 +271,13 @@ export class RoomStore {
       ...this.getStageState(),
       sheetUrl: this.sheetUrl,
       sheetSource: this.sheetSource,
+      activeGroup: this.activeGroup,
+      groups: this.groups,
+      totalAllQuestions: this.allQuestions.length,
       questions: this.questions.map((item, i) => ({
         index: i,
         id: item.id,
+        group: item.group || '預設題組',
         order: item.order,
         mode: item.mode,
         title: item.title,

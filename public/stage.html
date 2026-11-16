@@ -242,7 +242,8 @@ function updateHUD() {
   }
   sb.classList.add('hidden');
   hud.style.opacity = '1';
-  document.getElementById('modePill').textContent = `Q${state.qIdx + 1}/${state.qTotal} · ${MODE_NAMES[state.mode] || state.mode}`;
+  const grpPrefix = state.group && state.group !== '預設題組' ? `${state.group} · ` : '';
+  document.getElementById('modePill').textContent = `${grpPrefix}Q${state.qIdx + 1}/${state.qTotal} · ${MODE_NAMES[state.mode] || state.mode}`;
   document.getElementById('countPill').textContent = `已參與 ${state.stats?.totalVotes || 0} 人`;
   document.getElementById('mainTitle').textContent = state.title || '';
   document.getElementById('subTitle').textContent = state.subtitle || '';

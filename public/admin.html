@@ -69,6 +69,14 @@ a{color:var(--accent)}
       <div id="syncMsg" class="muted" style="margin-top:8px"></div>
     </div>
 
+    <div class="card">
+      <div class="row" style="justify-content:space-between;margin-bottom:10px">
+        <h3 style="margin:0">🏢 處室 / 題組切換</h3>
+        <span class="muted">在試算表新增 <code>group</code>（或 <code>處室</code>）欄位即可分組管理</span>
+      </div>
+      <div id="groupBar" class="row"></div>
+    </div>
+
     <div class="grid">
       <div>
         <div class="card">
@@ -190,16 +198,23 @@ function esc(s) {
 
 function render() {
   if (!state) return;
-  $('sourceInfo').textContent = `題庫來源：${state.sheetSource || '內建示範'} ｜ 共 ${state.questions?.length || 0} 題`;
+  $('sourceInfo').textContent = `題庫來源：${state.sheetSource || '內建示範'} ｜ 目前題組 ${state.questions?.length || 0} 題（總題庫 ${state.totalAllQuestions || 0} 題）`;
   $('standbyBtn').textContent = state.standby ? '▶ 結束待機、進入題目' : '⏸ 切回待機 QR 畫面';
   $('liveCount').textContent = `已參與 ${state.stats?.totalVotes || 0} 人`;
   $('curInfo').textContent = state.standby
     ? '目前為【待機 QR 歡迎畫面】'
-    : `Q${state.qIdx + 1} [${state.mode}] ${state.title} （狀態：${state.status}）`;
+    : `Q${state.qIdx + 1} [${state.group || '預設題組'} · ${state.mode}] ${state.title} （狀態：${state.status}）`;
+
+  const groups = state.groups || [];
+  const activeG = state.activeGroup || '__ALL__';
+  $('groupBar').innerHTML = [
+    `<button class="${activeG === '__ALL__' ? 'primary' : 'ghost'}" onclick="ctrl('setGroup',{group:'__ALL__'})">全部題目 (${state.totalAllQuestions || 0})</button>`,
+    ...groups.map(g => `<button class="${activeG === g.name ? 'primary' : 'ghost'}" onclick="ctrl('setGroup',{group:'${esc(g.name)}'})">${esc(g.name)} (${g.count})</button>`),
+  ].join('');
 
   $('qList').innerHTML = (state.questions || []).map(q => `
     <div class="q-item ${!state.standby && q.index === state.qIdx ? 'active' : ''}" data-idx="${q.index}">
-      <div><span class="tag">${esc(q.mode)}</span> ${esc(q.title)}</div>
+      <div><span class="tag">${esc(q.group)}</span> <span class="tag">${esc(q.mode)}</span> ${esc(q.title)}</div>
       <span class="muted">#${q.order}</span>
     </div>
   `).join('');

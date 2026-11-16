@@ -110,6 +110,7 @@ export function rowsToQuestions(rows) {
     const title = get(r, 'title');
     if (!title || !VALID_MODES.has(mode)) continue;
 
+    const group = get(r, 'group') || get(r, 'department') || get(r, '處室') || '預設題組';
     const orderNum = Number.parseInt(get(r, 'order'), 10);
     const options = [];
     for (let k = 1; k <= 5; k++) {
@@ -119,7 +120,8 @@ export function rowsToQuestions(rows) {
 
     const timerSec = Math.max(0, Number.parseInt(get(r, 'timer_sec'), 10) || 0);
     questions.push({
-      id: `q_${Number.isFinite(orderNum) ? orderNum : rIdx}_${mode}`,
+      id: `q_${group}_${Number.isFinite(orderNum) ? orderNum : rIdx}_${mode}`,
+      group,
       order: Number.isFinite(orderNum) ? orderNum : rIdx,
       mode,
       title,

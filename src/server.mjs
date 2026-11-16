@@ -292,6 +292,7 @@ const server = http.createServer(async (req, res) => {
       else if (action === 'prev') store.goToQuestion(store.currentQuestionIndex - 1);
       else if (action === 'next') store.goToQuestion(store.currentQuestionIndex + 1);
       else if (action === 'goto') store.goToQuestion(Number(body.index));
+      else if (action === 'setGroup') store.setGroup(body.group);
       else if (action === 'status') store.setStatus(body.status);
       else if (action === 'reset') store.resetCurrentQuestion();
       else if (action === 'spotlight') store.setSpotlight(body.msgId || null);
