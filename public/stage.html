@@ -1,0 +1,678 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>台上大螢幕 — 千人現場即時互動</title>
+<style>
+:root{--bg:#060b18;--text:#f8fafc;--muted:#94a3b8;--accent:#38bdf8;--gold:#fbbf24}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:radial-gradient(ellipse at 50% 20%,#111e3d 0%,#060b18 70%);color:var(--text);font-family:"Noto Sans TC","Microsoft JhengHei",-apple-system,sans-serif}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+.hud-top{position:fixed;top:24px;left:36px;right:36px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none;z-index:10;gap:24px}
+.title-box{max-width:74%}
+.badge-row{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.mode-pill{padding:6px 14px;border-radius:999px;background:rgba(56,189,248,.16);border:1px solid rgba(56,189,248,.4);color:var(--accent);font-size:15px;font-weight:700;letter-spacing:.5px}
+.count-pill{padding:6px 14px;border-radius:999px;background:rgba(255,255,255,.08);color:#e2e8f0;font-size:15px;font-weight:700}
+.main-title{font-size:clamp(26px,3.2vw,48px);font-weight:900;line-height:1.25;margin:0;text-shadow:0 4px 20px rgba(0,0,0,.6)}
+.sub-title{font-size:clamp(15px,1.5vw,22px);color:var(--muted);margin:8px 0 0}
+.qr-float{background:rgba(15,23,42,.88);backdrop-filter:blur(10px);border:1px solid rgba(148,163,184,.25);border-radius:16px;padding:10px;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,.5);transition:opacity .25s,transform .25s}
+.qr-float.hidden{opacity:0;transform:translateY(-12px);pointer-events:none}
+.qr-float img{width:118px;height:118px;border-radius:8px;display:block;background:#fff;padding:4px}
+.qr-float span{display:block;font-size:12px;color:#cbd5e1;margin-top:6px;font-weight:600}
+.standby-overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;z-index:15;padding:32px}
+.standby-overlay.hidden{display:none}
+.standby-title{font-size:clamp(32px,4.2vw,60px);font-weight:900;margin:0 0 12px;background:linear-gradient(135deg,#fff,#7dd3fc);-webkit-background-clip:text;color:transparent}
+.standby-sub{font-size:clamp(18px,1.8vw,26px);color:var(--muted);margin:0 0 32px}
+.standby-qr{background:#fff;padding:18px;border-radius:24px;box-shadow:0 0 60px rgba(56,189,248,.35)}
+.standby-qr img{width:min(300px,36vh);height:min(300px,36vh);display:block}
+.standby-url{margin-top:20px;font-size:clamp(16px,1.6vw,22px);color:#7dd3fc;font-weight:700;letter-spacing:.5px;background:rgba(15,23,42,.8);padding:10px 22px;border-radius:999px;border:1px solid rgba(56,189,248,.35)}
+.spotlight{position:fixed;left:50%;top:54%;transform:translate(-50%,-50%) scale(.92);width:min(820px,84vw);background:linear-gradient(145deg,rgba(15,23,42,.96),rgba(30,41,59,.96));border:2px solid var(--gold);border-radius:28px;padding:36px 42px;box-shadow:0 24px 80px rgba(0,0,0,.85),0 0 60px rgba(251,191,36,.25);z-index:20;opacity:0;pointer-events:none;transition:all .28s cubic-bezier(.2,.9,.3,1.1)}
+.spotlight.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+.spotlight-tag{display:inline-block;padding:6px 14px;border-radius:999px;background:rgba(251,191,36,.18);color:var(--gold);font-weight:800;font-size:16px;margin-bottom:14px}
+.spotlight-text{font-size:clamp(28px,3.2vw,46px);font-weight:800;line-height:1.4;margin:0}
+.hotkey-hint{position:fixed;bottom:12px;right:18px;font-size:12px;color:rgba(148,163,184,.45);z-index:10;pointer-events:none}
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+
+<div id="hud" class="hud-top">
+  <div class="title-box">
+    <div class="badge-row">
+      <span id="modePill" class="mode-pill">準備中</span>
+      <span id="countPill" class="count-pill">已參與 0 人</span>
+      <span id="timerPill" class="count-pill" style="display:none;color:#fbbf24"></span>
+    </div>
+    <h1 id="mainTitle" class="main-title">載入中...</h1>
+    <p id="subTitle" class="sub-title"></p>
+  </div>
+  <div id="qrFloat" class="qr-float">
+    <img id="qrFloatImg" alt="QR Code">
+    <span>掃碼加入互動</span>
+  </div>
+</div>
+
+<div id="standbyOverlay" class="standby-overlay">
+  <h1 id="sbTitle" class="standby-title">千人現場即時互動系統</h1>
+  <p class="standby-sub">請使用手機掃描下方 QR Code，免下載、免登入即可參與現場互動</p>
+  <div class="standby-qr"><img id="sbQrImg" alt="QR Code"></div>
+  <div id="sbUrl" class="standby-url">載入連線網址中...</div>
+</div>
+
+<div id="spotlight" class="spotlight">
+  <div id="spTag" class="spotlight-tag">現場提問聚焦</div>
+  <p id="spText" class="spotlight-text"></p>
+</div>
+
+<div class="hotkey-hint">快捷鍵：[H] 顯示/隱藏 QR Code ｜ [1~5] 微調票數 ｜ [B] 模擬湧入 ｜ [F] 全螢幕</div>
+
+<script>
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+let W = 1920, H = 1080, DPR = 1;
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth;
+  H = window.innerHeight;
+  cv.width = W * DPR;
+  cv.height = H * DPR;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+const COLORS = ['#38bdf8', '#a855f7', '#34d399', '#fb923c', '#f472b6', '#facc15'];
+const MODE_NAMES = {
+  BUBBLE: '物理碰撞氣泡圖',
+  SPECTRUM: '理念天平 / 雙向拔河',
+  MYTH: '破除迷思限時競賽',
+  QUADRANT: '二維心態落點矩陣',
+  TREE: '親師共育之樹',
+  DANMAKU: '滾動彈幕 × 講者聚焦牆',
+};
+
+let state = null;
+let joinUrl = location.origin;
+let qrVisible = true;
+
+// Physics & animation states
+const bubbles = new Map();
+let spectrumTilt = 0; // -1 to 1
+let spectrumAvgLerp = 50;
+const quadParticles = [];
+let seenQuadCount = 0;
+const treeLeaves = [];
+const treeBeams = [];
+let seenTreeCount = 0;
+const danmakuItems = [];
+const seenDanmakuIds = new Set();
+let lastQId = '';
+
+// Background ambient stars
+const stars = Array.from({ length: 70 }, () => ({
+  x: Math.random(),
+  y: Math.random(),
+  r: 0.8 + Math.random() * 1.8,
+  a: 0.2 + Math.random() * 0.5,
+  sp: 0.002 + Math.random() * 0.006,
+}));
+
+fetch('/api/network-info').then(r => r.json()).then(info => {
+  joinUrl = (location.hostname === 'localhost' || location.hostname === '127.0.0.1') && info.urls?.length
+    ? info.urls[0]
+    : location.origin;
+  const qrSrc = '/api/qr.svg?url=' + encodeURIComponent(joinUrl);
+  document.getElementById('qrFloatImg').src = qrSrc;
+  document.getElementById('sbQrImg').src = qrSrc;
+  document.getElementById('sbUrl').textContent = joinUrl;
+});
+
+function resetVisualCaches(qId) {
+  lastQId = qId;
+  bubbles.clear();
+  quadParticles.length = 0;
+  seenQuadCount = 0;
+  treeLeaves.length = 0;
+  treeBeams.length = 0;
+  seenTreeCount = 0;
+  danmakuItems.length = 0;
+  seenDanmakuIds.clear();
+}
+
+function syncVisualData(s) {
+  if (!s || s.standby) return;
+  if (s.qId !== lastQId) resetVisualCaches(s.qId);
+
+  const st = s.stats || {};
+  if (s.mode === 'BUBBLE') {
+    const opts = s.options || [];
+    opts.forEach((o, i) => {
+      const count = st.counts?.[o.key] || 0;
+      if (!bubbles.has(o.key)) {
+        const angle = (i / Math.max(1, opts.length)) * Math.PI * 2;
+        bubbles.set(o.key, {
+          key: o.key,
+          label: o.label,
+          color: COLORS[i % COLORS.length],
+          x: W / 2 + Math.cos(angle) * 180,
+          y: H * 0.56 + Math.sin(angle) * 120,
+          vx: 0, vy: 0,
+          r: 68, targetR: 68,
+          count,
+        });
+      }
+      const b = bubbles.get(o.key);
+      b.count = count;
+      b.label = o.label;
+    });
+  } else if (s.mode === 'QUADRANT') {
+    const pts = st.recentPoints || [];
+    if (pts.length < seenQuadCount) { quadParticles.length = 0; seenQuadCount = 0; }
+    for (let i = seenQuadCount; i < pts.length; i++) {
+      const p = pts[i];
+      quadParticles.push({
+        tx: p.x / 100, ty: p.y / 100,
+        cx: 0.5, cy: 1.05,
+        r: 4 + Math.random() * 3,
+        alpha: 0.45 + Math.random() * 0.35,
+      });
+    }
+    seenQuadCount = pts.length;
+    if (quadParticles.length > 800) quadParticles.splice(0, quadParticles.length - 800);
+  } else if (s.mode === 'TREE') {
+    const bl = st.recentBlessings || [];
+    if (bl.length < seenTreeCount) { treeLeaves.length = 0; seenTreeCount = 0; }
+    for (let i = seenTreeCount; i < bl.length; i++) {
+      const angle = -Math.PI + Math.random() * Math.PI;
+      const dist = 40 + Math.random() * Math.min(W, H) * 0.25;
+      const tx = W / 2 + Math.cos(angle) * dist * 1.15;
+      const ty = H * 0.44 + Math.sin(angle) * dist * 0.72;
+      treeBeams.push({
+        x: W / 2 + (Math.random() - 0.5) * 240,
+        y: H * 0.92,
+        tx, ty,
+        p: 0,
+        color: COLORS[i % COLORS.length],
+        text: bl[i].text,
+      });
+    }
+    seenTreeCount = bl.length;
+  } else if (s.mode === 'DANMAKU') {
+    const msgs = st.messages || [];
+    for (const m of msgs) {
+      if (!seenDanmakuIds.has(m.id)) {
+        seenDanmakuIds.add(m.id);
+        const lane = Math.floor(Math.random() * 8);
+        danmakuItems.push({
+          id: m.id,
+          tag: m.tag,
+          text: m.text,
+          x: W + 40 + Math.random() * 120,
+          y: H * 0.24 + lane * ((H * 0.65) / 8),
+          speed: 1.8 + Math.random() * 1.4,
+          color: COLORS[lane % COLORS.length],
+        });
+      }
+    }
+    // Spotlight card
+    const sp = document.getElementById('spotlight');
+    const spMsg = st.spotlightId ? msgs.find(m => m.id === st.spotlightId) : null;
+    if (spMsg) {
+      document.getElementById('spTag').textContent = `# ${spMsg.tag}`;
+      document.getElementById('spText').textContent = spMsg.text;
+      sp.classList.add('show');
+    } else {
+      sp.classList.remove('show');
+    }
+  }
+}
+
+function updateHUD() {
+  if (!state) return;
+  const sb = document.getElementById('standbyOverlay');
+  const hud = document.getElementById('hud');
+  if (state.standby) {
+    sb.classList.remove('hidden');
+    hud.style.opacity = '0';
+    document.getElementById('sbTitle').textContent = state.eventTitle || '千人現場即時互動系統';
+    document.getElementById('spotlight').classList.remove('show');
+    return;
+  }
+  sb.classList.add('hidden');
+  hud.style.opacity = '1';
+  document.getElementById('modePill').textContent = `Q${state.qIdx + 1}/${state.qTotal} · ${MODE_NAMES[state.mode] || state.mode}`;
+  document.getElementById('countPill').textContent = `已參與 ${state.stats?.totalVotes || 0} 人`;
+  document.getElementById('mainTitle').textContent = state.title || '';
+  document.getElementById('subTitle').textContent = state.subtitle || '';
+
+  const tp = document.getElementById('timerPill');
+  if (state.timerEndsAt && state.status === 'VOTING') {
+    const rem = Math.max(0, Math.ceil((state.timerEndsAt - Date.now()) / 1000));
+    tp.style.display = 'inline-block';
+    tp.textContent = `⏱ ${rem}s`;
+  } else if (state.status === 'LOCKED') {
+    tp.style.display = 'inline-block';
+    tp.textContent = '🔒 已截止作答';
+  } else if (state.status === 'REVEALED') {
+    tp.style.display = 'inline-block';
+    tp.textContent = '✨ 真相已揭曉';
+  } else {
+    tp.style.display = 'none';
+  }
+}
+
+// ---------- 60FPS Renderers ----------
+function drawStars(t) {
+  for (const s of stars) {
+    const a = s.a * (0.6 + 0.4 * Math.sin(t * s.sp + s.x * 10));
+    ctx.fillStyle = `rgba(186,230,253,${a})`;
+    ctx.beginPath();
+    ctx.arc(s.x * W, s.y * H, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawBubbleMode() {
+  const arr = Array.from(bubbles.values());
+  if (arr.length === 0) return;
+  const maxC = Math.max(1, ...arr.map(b => b.count));
+  const leader = arr.reduce((a, b) => (b.count > a.count ? b : a), arr[0]);
+  const cy = H * 0.57;
+  const baseR = Math.min(W, H) * 0.075;
+  const maxAdd = Math.min(W, H) * 0.13;
+
+  for (const b of arr) {
+    // Radius proportional to sqrt(N)
+    b.targetR = baseR + Math.sqrt(b.count / maxC) * maxAdd;
+    b.r += (b.targetR - b.r) * 0.08;
+    // Centripetal gravity
+    b.vx += (W / 2 - b.x) * 0.0018;
+    b.vy += (cy - b.y) * 0.0018;
+    b.vx *= 0.9;
+    b.vy *= 0.9;
+    b.x += b.vx;
+    b.y += b.vy;
+  }
+
+  // Elastic collision between bubbles
+  for (let i = 0; i < arr.length; i++) {
+    for (let j = i + 1; j < arr.length; j++) {
+      const a = arr[i], b = arr[j];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const dist = Math.hypot(dx, dy) || 1;
+      const minDist = a.r + b.r + 16;
+      if (dist < minDist) {
+        const push = (minDist - dist) * 0.06;
+        const nx = dx / dist, ny = dy / dist;
+        a.vx -= nx * push; a.vy -= ny * push;
+        b.vx += nx * push; b.vy += ny * push;
+      }
+    }
+  }
+
+  // Draw bubbles
+  for (const b of arr) {
+    const isLeader = leader.count > 0 && b === leader;
+    ctx.save();
+    ctx.shadowColor = isLeader ? '#fbbf24' : b.color;
+    ctx.shadowBlur = isLeader ? 40 : 22;
+    const grad = ctx.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.3, b.r * 0.1, b.x, b.y, b.r);
+    grad.addColorStop(0, '#ffffff44');
+    grad.addColorStop(0.5, b.color + 'cc');
+    grad.addColorStop(1, b.color + '66');
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.lineWidth = isLeader ? 4 : 2;
+    ctx.strokeStyle = isLeader ? '#fbbf24' : '#ffffff55';
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.font = `800 ${Math.max(16, Math.round(b.r * 0.18))}px "Noto Sans TC",sans-serif`;
+    ctx.fillText(b.label, b.x, b.y - 4, b.r * 1.7);
+    ctx.font = `900 ${Math.max(18, Math.round(b.r * 0.24))}px "Noto Sans TC",sans-serif`;
+    ctx.fillStyle = '#e0f2fe';
+    ctx.fillText(`${b.count} 票`, b.x, b.y + Math.max(22, b.r * 0.26));
+
+    if (isLeader) {
+      ctx.font = '800 16px "Noto Sans TC",sans-serif';
+      ctx.fillStyle = '#fde047';
+      ctx.fillText('👑 最受關注首選', b.x, b.y - b.r - 12);
+    }
+  }
+}
+
+function drawSpectrumMode(s) {
+  const avg = s.stats?.avgSpectrum ?? 50;
+  spectrumAvgLerp += (avg - spectrumAvgLerp) * 0.08;
+  const targetTilt = ((spectrumAvgLerp - 50) / 50) * 0.22; // radians
+  spectrumTilt += (targetTilt - spectrumTilt) * 0.08;
+
+  const cx = W / 2, cy = H * 0.6;
+  const barW = Math.min(W * 0.72, 1000);
+  const leftLabel = s.options?.[0]?.label || '左端';
+  const rightLabel = s.options?.[1]?.label || '右端';
+  const leftPct = Math.round(100 - spectrumAvgLerp);
+  const rightPct = 100 - leftPct;
+
+  // Fulcrum triangle
+  ctx.fillStyle = '#334155';
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + 16);
+  ctx.lineTo(cx - 48, cy + 110);
+  ctx.lineTo(cx + 48, cy + 110);
+  ctx.closePath();
+  ctx.fill();
+
+  // Tilted beam
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(spectrumTilt);
+  const grad = ctx.createLinearGradient(-barW / 2, 0, barW / 2, 0);
+  grad.addColorStop(0, '#38bdf8');
+  grad.addColorStop(0.5, '#818cf8');
+  grad.addColorStop(1, '#f472b6');
+  ctx.shadowColor = '#38bdf8';
+  ctx.shadowBlur = 24;
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.roundRect(-barW / 2, -14, barW, 28, 14);
+  ctx.fill();
+  ctx.restore();
+
+  // Left & Right percentage cards
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = '900 54px "Noto Sans TC",sans-serif';
+  ctx.fillText(`${leftPct}%`, cx - barW / 2, cy - 110);
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = '700 26px "Noto Sans TC",sans-serif';
+  ctx.fillText(leftLabel, cx - barW / 2, cy - 68);
+
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#f472b6';
+  ctx.font = '900 54px "Noto Sans TC",sans-serif';
+  ctx.fillText(`${rightPct}%`, cx + barW / 2, cy - 110);
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = '700 26px "Noto Sans TC",sans-serif';
+  ctx.fillText(rightLabel, cx + barW / 2, cy - 68);
+}
+
+function drawMythMode(s, t) {
+  const cx = W / 2, cy = H * 0.58;
+  const total = s.stats?.totalVotes || 0;
+
+  if (s.status !== 'REVEALED') {
+    // Hide distribution during voting to prevent herd effect!
+    const pulse = 1 + 0.04 * Math.sin(t * 0.08);
+    ctx.save();
+    ctx.strokeStyle = s.status === 'LOCKED' ? '#f59e0b' : '#38bdf8';
+    ctx.lineWidth = 10;
+    ctx.shadowColor = '#38bdf8';
+    ctx.shadowBlur = 30;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 150 * pulse, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff';
+    ctx.font = '900 72px "Noto Sans TC",sans-serif';
+    ctx.fillText(String(total), cx, cy + 14);
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '700 22px "Noto Sans TC",sans-serif';
+    ctx.fillText(s.status === 'LOCKED' ? '已鎖定作答，準備揭曉真相' : '人已作答（結果保密中）', cx, cy + 56);
+    return;
+  }
+
+  // REVEALED: Donut chart + options + explanation
+  const correctKey = s.correctOpt;
+  const correctCount = s.stats?.counts?.[correctKey] || 0;
+  const pct = total > 0 ? Math.round((correctCount / total) * 100) : 0;
+  const ringX = W * 0.28, ringY = H * 0.58, R = 135;
+
+  ctx.lineWidth = 28;
+  ctx.strokeStyle = 'rgba(239,68,68,.35)';
+  ctx.beginPath(); ctx.arc(ringX, ringY, R, 0, Math.PI * 2); ctx.stroke();
+
+  ctx.strokeStyle = '#22c55e';
+  ctx.beginPath();
+  ctx.arc(ringX, ringY, R, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * pct) / 100);
+  ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#22c55e';
+  ctx.font = '900 56px "Noto Sans TC",sans-serif';
+  ctx.fillText(`${pct}%`, ringX, ringY + 14);
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '700 20px "Noto Sans TC",sans-serif';
+  ctx.fillText('全場答對率', ringX, ringY + 50);
+
+  // Right side: options + explanation
+  const rx = W * 0.46;
+  let ry = H * 0.36;
+  ctx.textAlign = 'left';
+  (s.options || []).forEach((o) => {
+    const c = s.stats?.counts?.[o.key] || 0;
+    const isOk = o.key === correctKey;
+    ctx.fillStyle = isOk ? 'rgba(34,197,94,.22)' : 'rgba(15,23,42,.75)';
+    ctx.strokeStyle = isOk ? '#22c55e' : '#334155';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.roundRect(rx, ry, W * 0.44, 58, 12);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = isOk ? '#86efac' : '#e2e8f0';
+    ctx.font = '700 22px "Noto Sans TC",sans-serif';
+    ctx.fillText(`${isOk ? '✅ ' : ''}${o.label}`, rx + 18, ry + 37, W * 0.33);
+    ctx.textAlign = 'right';
+    ctx.fillText(`${c} 票`, rx + W * 0.42, ry + 37);
+    ctx.textAlign = 'left';
+    ry += 72;
+  });
+
+  if (s.explanation) {
+    ctx.fillStyle = '#fde047';
+    ctx.font = '700 22px "Noto Sans TC",sans-serif';
+    ctx.fillText(`💡 解析：${s.explanation}`, rx, ry + 26, W * 0.45);
+  }
+}
+
+function drawQuadrantMode(s) {
+  const size = Math.min(W * 0.56, H * 0.62);
+  const left = (W - size) / 2, top = H * 0.27;
+
+  // Grid box
+  ctx.fillStyle = 'rgba(15,23,42,.65)';
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 2;
+  ctx.fillRect(left, top, size, size);
+  ctx.strokeRect(left, top, size, size);
+
+  // Axes
+  ctx.strokeStyle = 'rgba(148,163,184,.45)';
+  ctx.beginPath();
+  ctx.moveTo(left + size / 2, top); ctx.lineTo(left + size / 2, top + size);
+  ctx.moveTo(left, top + size / 2); ctx.lineTo(left + size, top + size / 2);
+  ctx.stroke();
+
+  // Axis labels
+  const xl = s.options?.[0]?.label || 'X 軸';
+  const yl = s.options?.[1]?.label || 'Y 軸';
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '700 20px "Noto Sans TC",sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${xl} ▶`, left + size / 2, top + size + 34);
+  ctx.save();
+  ctx.translate(left - 28, top + size / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.fillText(`${yl} ▶`, 0, 0);
+  ctx.restore();
+
+  // Particles flying & glowing heatmap
+  for (const p of quadParticles) {
+    p.cx += (p.tx - p.cx) * 0.08;
+    p.cy += (p.ty - p.cy) * 0.08;
+    const px = left + p.cx * size;
+    const py = top + (1 - p.cy) * size;
+    ctx.fillStyle = `rgba(56,189,248,${p.alpha * 0.45})`;
+    ctx.beginPath();
+    ctx.arc(px, py, p.r * 2.2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = `rgba(224,242,254,${p.alpha})`;
+    ctx.beginPath();
+    ctx.arc(px, py, p.r * 0.7, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Average center of mass
+  if ((s.stats?.totalVotes || 0) > 0) {
+    const ax = left + ((s.stats.avgX || 50) / 100) * size;
+    const ay = top + (1 - (s.stats.avgY || 50) / 100) * size;
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(ax, ay, 18, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.fillStyle = '#fbbf24';
+    ctx.font = '800 16px "Noto Sans TC",sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(`全場重心 (${s.stats.avgX}, ${s.stats.avgY})`, ax + 24, ay + 6);
+  }
+}
+
+function drawTreeMode(s) {
+  const cx = W / 2, baseY = H * 0.9;
+  const total = s.stats?.totalVotes || 0;
+  const glow = Math.min(1, total / 30);
+
+  // Tree trunk & branches silhouette
+  ctx.save();
+  ctx.strokeStyle = glow > 0.7 ? '#fbbf24' : '#64748b';
+  ctx.shadowColor = '#fbbf24';
+  ctx.shadowBlur = glow * 35;
+  ctx.lineCap = 'round';
+  const branch = (x, y, len, ang, w, depth) => {
+    if (depth === 0) return;
+    const nx = x + Math.cos(ang) * len;
+    const ny = y + Math.sin(ang) * len;
+    ctx.lineWidth = w;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(nx, ny); ctx.stroke();
+    branch(nx, ny, len * 0.72, ang - 0.42, w * 0.68, depth - 1);
+    branch(nx, ny, len * 0.72, ang + 0.42, w * 0.68, depth - 1);
+  };
+  branch(cx, baseY, Math.min(W, H) * 0.18, -Math.PI / 2, 18, 5);
+  ctx.restore();
+
+  // Animate flying light beams -> bloom into leaves
+  for (let i = treeBeams.length - 1; i >= 0; i--) {
+    const b = treeBeams[i];
+    b.p += 0.035;
+    const x = b.x + (b.tx - b.x) * b.p;
+    const y = b.y + (b.ty - b.y) * b.p;
+    ctx.fillStyle = b.color;
+    ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
+    if (b.p >= 1) {
+      treeLeaves.push({ x: b.tx, y: b.ty, color: b.color, text: b.text, r: 0, maxR: 8 + Math.random() * 7 });
+      treeBeams.splice(i, 1);
+    }
+  }
+
+  for (let i = 0; i < treeLeaves.length; i++) {
+    const lf = treeLeaves[i];
+    lf.r += (lf.maxR - lf.r) * 0.1;
+    ctx.save();
+    ctx.shadowColor = lf.color;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = lf.color;
+    ctx.beginPath(); ctx.arc(lf.x, lf.y, lf.r, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    if (i >= treeLeaves.length - 8 && lf.text) {
+      ctx.fillStyle = 'rgba(248,250,252,.85)';
+      ctx.font = '600 14px "Noto Sans TC",sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(lf.text, lf.x, lf.y - lf.r - 6);
+    }
+  }
+}
+
+function drawDanmakuMode() {
+  for (let i = danmakuItems.length - 1; i >= 0; i--) {
+    const d = danmakuItems[i];
+    d.x -= d.speed;
+    const label = `[${d.tag}] ${d.text}`;
+    ctx.font = '700 22px "Noto Sans TC",sans-serif';
+    const tw = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(15,23,42,.72)';
+    ctx.strokeStyle = d.color;
+    ctx.lineWidth = 1.8;
+    ctx.beginPath();
+    ctx.roundRect(d.x, d.y - 24, tw + 28, 40, 20);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = '#f8fafc';
+    ctx.textAlign = 'left';
+    ctx.fillText(label, d.x + 14, d.y + 4);
+    if (d.x + tw + 40 < 0) danmakuItems.splice(i, 1);
+  }
+}
+
+let tick = 0;
+function loop() {
+  tick++;
+  ctx.clearRect(0, 0, W, H);
+  drawStars(tick);
+  if (state && !state.standby) {
+    if (state.mode === 'BUBBLE') drawBubbleMode();
+    else if (state.mode === 'SPECTRUM') drawSpectrumMode(state);
+    else if (state.mode === 'MYTH') drawMythMode(state, tick);
+    else if (state.mode === 'QUADRANT') drawQuadrantMode(state);
+    else if (state.mode === 'TREE') drawTreeMode(state);
+    else if (state.mode === 'DANMAKU') drawDanmakuMode();
+  }
+  updateHUD();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// Stage SSE stream
+const es = new EventSource('/api/stream/stage');
+es.onmessage = (e) => {
+  try {
+    state = JSON.parse(e.data);
+    syncVisualData(state);
+  } catch {}
+};
+
+// Stage Hotkeys (H, 1-5, B, F)
+window.addEventListener('keydown', (e) => {
+  const k = e.key.toLowerCase();
+  if (k === 'h') {
+    qrVisible = !qrVisible;
+    document.getElementById('qrFloat').classList.toggle('hidden', !qrVisible);
+  } else if (k === 'f') {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  } else if (k === 'b') {
+    fetch('/api/stage/hotkey', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'burst' }),
+    });
+  } else if (['1', '2', '3', '4', '5'].includes(k)) {
+    fetch('/api/stage/hotkey', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'adjust', optNum: Number(k), delta: 5 }),
+    });
+  }
+});
+</script>
+</body>
+</html>

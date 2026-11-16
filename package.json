@@ -1,0 +1,14 @@
+{
+  "name": "live-stage-interact",
+  "version": "1.0.0",
+  "description": "千人現場即時互動系統 — 讀取 Google Sheets 題庫與現場 1,000~3,000 人即時互動網頁",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "dev": "node --watch src/server.mjs",
+    "load-test": "node scripts/load-test.mjs"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}

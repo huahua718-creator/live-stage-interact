@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>現場即時互動</title>
+<style>
+:root{--bg:#0b1120;--card:#151f32;--border:#26344d;--text:#f8fafc;--muted:#94a3b8;--accent:#38bdf8;--accent2:#818cf8;--ok:#22c55e;--bad:#ef4444;--gold:#f59e0b}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;min-height:100dvh;background:radial-gradient(circle at top,#172554 0%,var(--bg) 60%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","Microsoft JhengHei",sans-serif;display:flex;flex-direction:column}
+.wrap{width:100%;max-width:480px;margin:0 auto;padding:16px 16px 28px;flex:1;display:flex;flex-direction:column}
+.top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--muted)}
+.pill{padding:4px 10px;border-radius:999px;background:rgba(56,189,248,.14);color:var(--accent);font-weight:600;white-space:nowrap}
+.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--ok);margin-right:5px}
+.dot.off{background:var(--gold)}
+.card{background:rgba(21,31,50,.92);border:1px solid var(--border);border-radius:18px;padding:18px;box-shadow:0 12px 30px rgba(0,0,0,.35)}
+h1{font-size:20px;line-height:1.4;margin:0 0 8px}
+.sub{font-size:14px;color:var(--muted);margin:0 0 16px;line-height:1.5}
+.timer{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;background:rgba(245,158,11,.15);color:#fbbf24;font-weight:700;font-size:14px;margin-bottom:12px}
+.opts{display:flex;flex-direction:column;gap:10px}
+.opt{width:100%;text-align:left;padding:15px 16px;border-radius:14px;border:1.5px solid var(--border);background:#0f172a;color:var(--text);font-size:16px;font-weight:600;cursor:pointer;transition:transform .08s,border-color .15s,background .15s;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.opt:active:not(:disabled){transform:scale(.98)}
+.opt:disabled{opacity:.65;cursor:default}
+.opt.sel{border-color:var(--accent);background:rgba(56,189,248,.18);opacity:1}
+.opt.ok{border-color:var(--ok);background:rgba(34,197,94,.2);opacity:1}
+.opt.bad{border-color:var(--bad);background:rgba(239,68,68,.2);opacity:1}
+.btn{width:100%;padding:15px;border:0;border-radius:14px;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#08101e;font-size:16px;font-weight:800;cursor:pointer;margin-top:12px}
+.btn:disabled{opacity:.5;cursor:default}
+.slider-box{background:#0f172a;border:1px solid var(--border);border-radius:14px;padding:14px;margin-bottom:12px}
+.slider-labels{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:8px;gap:8px}
+.slider-val{text-align:center;font-size:22px;font-weight:800;color:var(--accent);margin-bottom:4px}
+input[type=range]{width:100%;accent-color:var(--accent);height:28px}
+.tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.tag{padding:7px 12px;border-radius:999px;border:1px solid var(--border);background:#0f172a;color:var(--muted);font-size:13px;cursor:pointer}
+.tag.active{border-color:var(--accent);color:var(--accent);background:rgba(56,189,248,.14);font-weight:700}
+textarea,input[type=text]{width:100%;padding:13px 14px;border-radius:14px;border:1.5px solid var(--border);background:#0f172a;color:var(--text);font-size:16px;font-family:inherit;resize:none}
+textarea:focus,input[type=text]:focus{outline:none;border-color:var(--accent)}
+.msg{margin-top:14px;padding:12px 14px;border-radius:12px;font-size:14px;line-height:1.5;text-align:center}
+.msg.info{background:rgba(56,189,248,.14);color:#7dd3fc}
+.msg.ok{background:rgba(34,197,94,.16);color:#86efac}
+.msg.bad{background:rgba(239,68,68,.16);color:#fca5a5}
+.standby{text-align:center;padding:38px 16px}
+.pulse{width:64px;height:64px;border-radius:50%;background:rgba(56,189,248,.18);border:2px solid var(--accent);margin:0 auto 18px;display:flex;align-items:center;justify-content:center;font-size:28px;animation:p 2s infinite}
+@keyframes p{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.75}}
+.mini-grid{width:130px;height:130px;margin:10px auto 4px;border:1px solid var(--border);border-radius:10px;background:#091020;position:relative}
+.mini-grid::before,.mini-grid::after{content:"";position:absolute;background:rgba(148,163,184,.25)}
+.mini-grid::before{left:50%;top:0;bottom:0;width:1px}
+.mini-grid::after{top:50%;left:0;right:0;height:1px}
+.mini-dot{width:12px;height:12px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent);position:absolute;transform:translate(-50%,50%)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <span id="evTitle">現場即時互動</span>
+    <span class="pill"><span id="connDot" class="dot"></span><span id="qBadge">連線中</span></span>
+  </div>
+  <div id="app" class="card"></div>
+</div>
+<script>
+const UUID_KEY='lsi_uuid';
+let uuid=localStorage.getItem(UUID_KEY);
+if(!uuid){
+  uuid=(crypto.randomUUID?crypto.randomUUID():Math.random().toString(36).slice(2)+Date.now().toString(36));
+  localStorage.setItem(UUID_KEY,uuid);
+}
+const $=id=>document.getElementById(id);
+const app=$('app'),evTitle=$('evTitle'),qBadge=$('qBadge'),connDot=$('connDot');
+
+let state=null,lastRenderKey='',timerIv=null,pollIv=null,es=null;
+let spectrumVal=50,quadX=50,quadY=50,selectedTag='',danmakuCooldown=0;
+
+function getVoted(qId){try{return JSON.parse(localStorage.getItem('lsi_v_'+qId)||'null')}catch{return null}}
+function setVoted(qId,val){try{localStorage.setItem('lsi_v_'+qId,JSON.stringify(val))}catch{}}
+
+function esc(s){return String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+
+async function postVote(payload){
+  const res=await fetch('/api/vote',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({qId:state.qId,uuid,payload})
+  });
+  return res.json();
+}
+
+function updateTimer(){
+  const el=$('timerEl');
+  if(!el||!state||!state.timerEndsAt)return;
+  const rem=Math.max(0,Math.ceil((state.timerEndsAt-Date.now())/1000));
+  el.textContent='⏱ 剩餘 '+rem+' 秒';
+}
+
+function render(){
+  if(!state)return;
+  evTitle.textContent=state.eventTitle||'現場即時互動';
+  if(state.standby){
+    qBadge.textContent='待機中';
+    const key='standby';
+    if(lastRenderKey===key)return;
+    lastRenderKey=key;
+    app.innerHTML=`<div class="standby"><div class="pulse">✨</div><h1>${esc(state.eventTitle)}</h1><p class="sub">請保持此畫面開啟，台上切換題目時您的手機將自動同步！</p></div>`;
+    return;
+  }
+
+  qBadge.textContent=`第 ${state.qIdx+1} / ${state.qTotal} 題`;
+  const voted=getVoted(state.qId);
+  const key=[state.qId,state.status,state.timerEndsAt,state.correctOpt||'',voted?JSON.stringify(voted):''].join('|');
+  if(lastRenderKey===key)return;
+  lastRenderKey=key;
+
+  const locked=state.status!=='VOTING';
+  let html=`<h1>${esc(state.title)}</h1>`;
+  if(state.subtitle)html+=`<p class="sub">${esc(state.subtitle)}</p>`;
+  if(state.timerEndsAt&&state.status==='VOTING')html+=`<div id="timerEl" class="timer">⏱ 倒數中</div>`;
+
+  if(state.mode==='BUBBLE'||state.mode==='MYTH'){
+    html+='<div class="opts">';
+    for(const o of (state.options||[])){
+      let cls='opt';
+      let badge='';
+      if(voted&&voted.optKey===o.key){cls+=' sel';badge='✓ 已選';}
+      if(state.mode==='MYTH'&&state.status==='REVEALED'){
+        if(o.key===state.correctOpt){cls+=' ok';badge='✅ 正解';}
+        else if(voted&&voted.optKey===o.key){cls+=' bad';badge='✕';}
+      }
+      html+=`<button class="${cls}" data-opt="${esc(o.key)}" ${(locked||voted)?'disabled':''}><span>${esc(o.label)}</span><span>${badge}</span></button>`;
+    }
+    html+='</div>';
+    if(state.mode==='MYTH'&&state.status==='REVEALED'){
+      const isRight=voted&&voted.optKey===state.correctOpt;
+      html+=`<div class="msg ${voted?(isRight?'ok':'bad'):'info'}">${voted?(isRight?'🎉 恭喜答對！':'💡 差一點點！'):'答案已揭曉'}${state.explanation?'<br>'+esc(state.explanation):''}</div>`;
+    }else if(voted){
+      html+=`<div class="msg ok">✓ 已送出作答，請看大螢幕即時結果！</div>`;
+    }else if(locked){
+      html+=`<div class="msg info">⏸ 本題作答已截止</div>`;
+    }
+  }else if(state.mode==='SPECTRUM'){
+    const left=state.options[0]?.label||'左端',right=state.options[1]?.label||'右端';
+    const cur=voted?voted.score:spectrumVal;
+    html+=`<div class="slider-box">
+      <div class="slider-labels"><span>◀ ${esc(left)}</span><span>${esc(right)} ▶</span></div>
+      <div id="spVal" class="slider-val">${cur}</div>
+      <input id="spRange" type="range" min="0" max="100" value="${cur}" ${(locked||voted)?'disabled':''}>
+    </div>`;
+    if(!voted&&!locked)html+=`<button id="spSend" class="btn">送出我的立場</button>`;
+    else if(voted)html+=`<div class="msg ok">✓ 已送出立場（傾向值 ${voted.score}）</div>`;
+    else html+=`<div class="msg info">⏸ 本題已截止</div>`;
+  }else if(state.mode==='QUADRANT'){
+    const xl=state.options[0]?.label||'X 軸',yl=state.options[1]?.label||'Y 軸';
+    const cx=voted?voted.x:quadX,cy=voted?voted.y:quadY;
+    html+=`<div class="slider-box">
+      <div class="slider-labels"><span>${esc(xl)}</span><span id="qxLbl">${cx}</span></div>
+      <input id="qxRange" type="range" min="0" max="100" value="${cx}" ${(locked||voted)?'disabled':''}>
+      <div class="slider-labels" style="margin-top:8px"><span>${esc(yl)}</span><span id="qyLbl">${cy}</span></div>
+      <input id="qyRange" type="range" min="0" max="100" value="${cy}" ${(locked||voted)?'disabled':''}>
+      <div class="mini-grid"><div id="miniDot" class="mini-dot" style="left:${cx}%;bottom:${cy}%"></div></div>
+    </div>`;
+    if(!voted&&!locked)html+=`<button id="qdSend" class="btn">送出我的落點</button>`;
+    else if(voted)html+=`<div class="msg ok">✓ 已送出您的心態落點 (${voted.x}, ${voted.y})</div>`;
+    else html+=`<div class="msg info">⏸ 本題已截止</div>`;
+  }else if(state.mode==='TREE'){
+    if(!voted&&!locked){
+      html+=`<input id="treeTxt" type="text" maxlength="20" placeholder="寫下對孩子的祝福（限20字，可留空）">
+      <button id="treeSend" class="btn">🌟 點亮願景燈火</button>`;
+    }else if(voted){
+      html+=`<div class="msg ok">✨ 感謝您點亮願景燈火！「${esc(voted.text)}」</div>`;
+    }else{
+      html+=`<div class="msg info">⏸ 本題已截止</div>`;
+    }
+  }else if(state.mode==='DANMAKU'){
+    const tags=(state.options&&state.options.length)?state.options.map(o=>o.label):['課程教學','升學輔導','校園生活','其他提問'];
+    if(!selectedTag||!tags.includes(selectedTag))selectedTag=tags[0];
+    html+=`<div class="tags">${tags.map(t=>`<button type="button" class="tag ${t===selectedTag?'active':''}" data-tag="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+    <textarea id="dmTxt" rows="3" maxlength="60" placeholder="輸入您的提問（限60字）" ${locked?'disabled':''}></textarea>
+    <button id="dmSend" class="btn" ${locked?'disabled':''}>🚀 發送提問至大螢幕</button>
+    <div id="dmMsg"></div>`;
+  }
+
+  app.innerHTML=html;
+  bindEvents();
+  updateTimer();
+}
+
+function bindEvents(){
+  app.querySelectorAll('[data-opt]').forEach(btn=>{
+    btn.onclick=async()=>{
+      const optKey=btn.dataset.opt;
+      app.querySelectorAll('[data-opt]').forEach(b=>b.disabled=true);
+      const r=await postVote({optKey});
+      if(r.ok||r.code==='DUPLICATE'){setVoted(state.qId,{optKey});lastRenderKey='';render();}
+      else{alert(r.message||'送出失敗');lastRenderKey='';render();}
+    };
+  });
+
+  const spRange=$('spRange'),spVal=$('spVal'),spSend=$('spSend');
+  if(spRange){
+    spRange.oninput=()=>{spectrumVal=Number(spRange.value);spVal.textContent=spectrumVal;};
+    if(spSend)spSend.onclick=async()=>{
+      spSend.disabled=true;
+      const r=await postVote({score:spectrumVal});
+      if(r.ok||r.code==='DUPLICATE'){setVoted(state.qId,{score:spectrumVal});lastRenderKey='';render();}
+      else{alert(r.message);spSend.disabled=false;}
+    };
+  }
+
+  const qx=$('qxRange'),qy=$('qyRange'),qdSend=$('qdSend');
+  if(qx&&qy){
+    const sync=()=>{
+      quadX=Number(qx.value);quadY=Number(qy.value);
+      $('qxLbl').textContent=quadX;$('qyLbl').textContent=quadY;
+      $('miniDot').style.left=quadX+'%';$('miniDot').style.bottom=quadY+'%';
+    };
+    qx.oninput=sync;qy.oninput=sync;
+    if(qdSend)qdSend.onclick=async()=>{
+      qdSend.disabled=true;
+      const r=await postVote({x:quadX,y:quadY});
+      if(r.ok||r.code==='DUPLICATE'){setVoted(state.qId,{x:quadX,y:quadY});lastRenderKey='';render();}
+      else{alert(r.message);qdSend.disabled=false;}
+    };
+  }
+
+  const treeSend=$('treeSend');
+  if(treeSend)treeSend.onclick=async()=>{
+    treeSend.disabled=true;
+    const text=($('treeTxt').value||'').trim().slice(0,20)||'點亮願景燈火 ✨';
+    const r=await postVote({text});
+    if(r.ok||r.code==='DUPLICATE'){setVoted(state.qId,{text});lastRenderKey='';render();}
+    else{alert(r.message);treeSend.disabled=false;}
+  };
+
+  app.querySelectorAll('[data-tag]').forEach(t=>{
+    t.onclick=()=>{
+      selectedTag=t.dataset.tag;
+      app.querySelectorAll('[data-tag]').forEach(x=>x.classList.toggle('active',x.dataset.tag===selectedTag));
+    };
+  });
+  const dmSend=$('dmSend');
+  if(dmSend)dmSend.onclick=async()=>{
+    const txt=($('dmTxt').value||'').trim();
+    if(!txt)return;
+    dmSend.disabled=true;
+    const r=await postVote({tag:selectedTag,text:txt});
+    const dmMsg=$('dmMsg');
+    if(r.ok){
+      $('dmTxt').value='';
+      dmMsg.innerHTML='<div class="msg ok">✓ 提問已送出！</div>';
+      setTimeout(()=>{dmSend.disabled=false;},3000);
+    }else{
+      dmMsg.innerHTML=`<div class="msg bad">${esc(r.message)}</div>`;
+      dmSend.disabled=false;
+    }
+  };
+}
+
+function applyState(next){
+  if(!state||next.v!==state.v||next.qId!==state.qId||next.status!==state.status||next.standby!==state.standby){
+    state=next;
+    render();
+  }
+}
+
+function startSSE(){
+  if(es)es.close();
+  es=new EventSource('/api/stream/mobile');
+  es.onopen=()=>{connDot.classList.remove('off');if(pollIv){clearInterval(pollIv);pollIv=null;}};
+  es.onmessage=e=>{try{applyState(JSON.parse(e.data));}catch{}};
+  es.onerror=()=>{
+    connDot.classList.add('off');
+    if(!pollIv){
+      pollIv=setInterval(async()=>{
+        try{const r=await fetch('/api/state');if(r.ok)applyState(await r.json());}catch{}
+      },1500);
+    }
+  };
+}
+
+timerIv=setInterval(updateTimer,500);
+fetch('/api/state').then(r=>r.json()).then(applyState).catch(()=>{});
+startSSE();
+</script>
+</body>
+</html>

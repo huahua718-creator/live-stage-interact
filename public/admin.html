@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>控場後台 — 千人現場即時互動</title>
+<style>
+:root{--bg:#0b1120;--panel:#131d31;--border:#26344d;--text:#f8fafc;--muted:#94a3b8;--accent:#38bdf8;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:"Noto Sans TC","Microsoft JhengHei",-apple-system,sans-serif;padding:20px}
+.container{max-width:1100px;margin:0 auto}
+.login-box{max-width:380px;margin:80px auto;background:var(--panel);border:1px solid var(--border);border-radius:18px;padding:28px}
+h1,h2,h3{margin:0 0 12px}
+.grid{display:grid;grid-template-columns:1.2fr 1fr;gap:18px}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:18px;margin-bottom:18px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+input[type=text],input[type=password]{flex:1;min-width:200px;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:#091020;color:var(--text);font-size:14px}
+button{padding:10px 16px;border:0;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;background:#1e293b;color:var(--text);transition:opacity .15s}
+button:hover{opacity:.9}
+button.primary{background:var(--accent);color:#061224}
+button.ok{background:var(--ok);color:#052e16}
+button.warn{background:var(--warn);color:#2a1800}
+button.bad{background:var(--bad);color:#fff}
+button.ghost{border:1px solid var(--border);background:transparent}
+.q-item{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-radius:10px;border:1px solid var(--border);margin-bottom:8px;cursor:pointer;gap:10px}
+.q-item.active{border-color:var(--accent);background:rgba(56,189,248,.14)}
+.tag{font-size:12px;padding:3px 8px;border-radius:6px;background:rgba(148,163,184,.15);color:#cbd5e1;font-weight:700}
+.status-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:18px}
+.msg-item{padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:#0c1426;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.msg-item.spot{border-color:var(--warn);background:rgba(245,158,11,.12)}
+.msg-item.hid{opacity:.45}
+.muted{color:var(--muted);font-size:13px}
+a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="container">
+  <div id="loginView" class="login-box">
+    <h2>🎛 控場後台登入</h2>
+    <p class="muted" style="margin-bottom:16px">請輸入控場密碼（預設為 <code>2026</code>，可於 <code>.env</code> 修改）</p>
+    <div class="row">
+      <input id="pwdInput" type="password" placeholder="輸入密碼">
+      <button id="loginBtn" class="primary">登入</button>
+    </div>
+    <p id="loginErr" style="color:var(--bad);font-size:13px;margin-top:10px"></p>
+  </div>
+
+  <div id="mainView" style="display:none">
+    <div class="status-bar">
+      <div>
+        <h1 style="margin-bottom:4px">🎛 現場控場後台</h1>
+        <span id="sourceInfo" class="muted">載入中...</span>
+      </div>
+      <div class="row">
+        <a href="/stage" target="_blank"><button class="ghost">🖥 開啟大螢幕 (/stage)</button></a>
+        <a href="/" target="_blank"><button class="ghost">📱 預覽手機端 (/)</button></a>
+        <button id="standbyBtn" class="warn">待機 QR 畫面</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>📊 Google Sheets 題庫同步</h3>
+      <p class="muted" style="margin:0 0 10px">在 Google 試算表點選「檔案 → 共享 → 發布到網路 → 逗號分隔值 (.csv)」，貼上連結即可即時更新題庫。<a href="/api/sample.csv" download>下載範例 CSV 範本</a></p>
+      <div class="row">
+        <input id="sheetInput" type="text" placeholder="貼上 Google Sheets 發布的 CSV 連結（留空則使用內建示範題庫）">
+        <button id="syncBtn" class="primary">同步題庫</button>
+      </div>
+      <div id="syncMsg" class="muted" style="margin-top:8px"></div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:12px">
+            <h3 style="margin:0">🎯 目前控制</h3>
+            <span id="liveCount" class="tag" style="font-size:14px;color:var(--accent)">已參與 0 人</span>
+          </div>
+          <div id="curInfo" style="margin-bottom:14px;font-size:16px;font-weight:700">待機中</div>
+          <div class="row" style="margin-bottom:12px">
+            <button id="prevBtn">⬅ 上一題</button>
+            <button id="nextBtn" class="primary">下一題 ➡</button>
+            <button id="burstBtn" class="ghost">⚡ 模擬湧入 50 票</button>
+          </div>
+          <div class="row">
+            <button id="voteBtn" class="ok">▶ 開放作答</button>
+            <button id="lockBtn" class="warn">🔒 截止鎖定</button>
+            <button id="revealBtn" class="primary">✨ 揭曉答案（迷思題）</button>
+            <button id="resetBtn" class="bad">🗑 重置本題票數</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>📋 題目進度表（點擊直接切換）</h3>
+          <div id="qList"></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="card">
+          <div class="row" style="justify-content:space-between;margin-bottom:10px">
+            <h3 style="margin:0">💬 彈幕審核與講者聚焦牆</h3>
+            <button id="clearSpotBtn" class="ghost" style="padding:6px 10px;font-size:12px">取消聚焦</button>
+          </div>
+          <p class="muted" style="margin:0 0 12px">切換至 <code>DANMAKU</code> 題型時，可在此將優質提問推上大螢幕中央聚焦，或隱藏不當留言。</p>
+          <div id="msgList" style="max-height:460px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let pwd = sessionStorage.getItem('lsi_admin_pwd') || '';
+let state = null;
+
+async function api(url, method = 'GET', body = null) {
+  const opts = { method, headers: { 'x-admin-password': pwd } };
+  if (body) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(url, opts);
+  const data = await r.json().catch(() => ({}));
+  if (r.status === 401) {
+    sessionStorage.removeItem('lsi_admin_pwd');
+    $('loginView').style.display = 'block';
+    $('mainView').style.display = 'none';
+    throw new Error(data.message || '密碼錯誤');
+  }
+  if (!r.ok) throw new Error(data.message || '操作失敗');
+  return data;
+}
+
+async function tryLogin(inputPwd) {
+  pwd = inputPwd;
+  try {
+    const res = await api('/api/admin/login', 'POST', { password: pwd });
+    sessionStorage.setItem('lsi_admin_pwd', pwd);
+    $('loginView').style.display = 'none';
+    $('mainView').style.display = 'block';
+    state = res.state;
+    $('sheetInput').value = state.sheetUrl || '';
+    render();
+  } catch (e) {
+    $('loginErr').textContent = e.message;
+  }
+}
+
+$('loginBtn').onclick = () => tryLogin($('pwdInput').value);
+$('pwdInput').onkeydown = e => { if (e.key === 'Enter') $('loginBtn').click(); };
+if (pwd) tryLogin(pwd);
+
+async function ctrl(action, extra = {}) {
+  const res = await api('/api/admin/control', 'POST', { action, ...extra });
+  state = res.state;
+  render();
+}
+
+$('standbyBtn').onclick = () => ctrl('standby', { value: !state?.standby });
+$('prevBtn').onclick = () => ctrl('prev');
+$('nextBtn').onclick = () => ctrl('next');
+$('voteBtn').onclick = () => ctrl('status', { status: 'VOTING' });
+$('lockBtn').onclick = () => ctrl('status', { status: 'LOCKED' });
+$('revealBtn').onclick = () => ctrl('status', { status: 'REVEALED' });
+$('resetBtn').onclick = () => { if (confirm('確定要清空本題目前所有票數與留言嗎？')) ctrl('reset'); };
+$('clearSpotBtn').onclick = () => ctrl('spotlight', { msgId: null });
+$('burstBtn').onclick = () => fetch('/api/stage/hotkey', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ action: 'burst' }),
+}).then(() => refresh());
+
+$('syncBtn').onclick = async () => {
+  $('syncMsg').textContent = '同步中...';
+  try {
+    const res = await api('/api/admin/sheet', 'POST', { sheetUrl: $('sheetInput').value });
+    state = res.state;
+    $('syncMsg').textContent = `✓ 已成功載入 ${res.count} 題（來源：${res.source}）`;
+    render();
+  } catch (e) {
+    $('syncMsg').textContent = `✕ 同步失敗：${e.message}`;
+  }
+};
+
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function render() {
+  if (!state) return;
+  $('sourceInfo').textContent = `題庫來源：${state.sheetSource || '內建示範'} ｜ 共 ${state.questions?.length || 0} 題`;
+  $('standbyBtn').textContent = state.standby ? '▶ 結束待機、進入題目' : '⏸ 切回待機 QR 畫面';
+  $('liveCount').textContent = `已參與 ${state.stats?.totalVotes || 0} 人`;
+  $('curInfo').textContent = state.standby
+    ? '目前為【待機 QR 歡迎畫面】'
+    : `Q${state.qIdx + 1} [${state.mode}] ${state.title} （狀態：${state.status}）`;
+
+  $('qList').innerHTML = (state.questions || []).map(q => `
+    <div class="q-item ${!state.standby && q.index === state.qIdx ? 'active' : ''}" data-idx="${q.index}">
+      <div><span class="tag">${esc(q.mode)}</span> ${esc(q.title)}</div>
+      <span class="muted">#${q.order}</span>
+    </div>
+  `).join('');
+  document.querySelectorAll('.q-item').forEach(el => {
+    el.onclick = () => ctrl('goto', { index: Number(el.dataset.idx) });
+  });
+
+  const msgs = state.allMessages || [];
+  const spotId = state.stats?.spotlightId;
+  $('msgList').innerHTML = msgs.length === 0
+    ? '<p class="muted">目前尚無提問留言</p>'
+    : msgs.map(m => `
+      <div class="msg-item ${spotId === m.id ? 'spot' : ''} ${m.hidden ? 'hid' : ''}">
+        <div>
+          <span class="tag">${esc(m.tag)}</span>
+          <span>${esc(m.text)}</span>
+        </div>
+        <div class="row" style="flex-shrink:0">
+          <button onclick="ctrl('spotlight',{msgId:'${spotId === m.id ? '' : m.id}'})" class="${spotId === m.id ? 'warn' : 'primary'}" style="padding:6px 10px;font-size:12px">${spotId === m.id ? '取消聚焦' : '推上聚焦'}</button>
+          <button onclick="ctrl('hideMessage',{msgId:'${m.id}',hidden:${!m.hidden}})" class="ghost" style="padding:6px 10px;font-size:12px">${m.hidden ? '恢復' : '隱藏'}</button>
+        </div>
+      </div>
+    `).join('');
+}
+
+async function refresh() {
+  if (!pwd || $('mainView').style.display === 'none') return;
+  try {
+    state = await api('/api/admin/state');
+    render();
+  } catch {}
+}
+setInterval(refresh, 1500);
+</script>
+</body>
+</html>
